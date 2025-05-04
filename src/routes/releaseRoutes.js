@@ -78,4 +78,24 @@ router.delete('/release/:releaseID', releaseController.deleteRelease);
  */
 router.get('/releases/user/:userID', releaseController.getReleasesByUserID);
 
+/**
+ * @route GET /api/releases/search
+ * @desc 搜索发布内容(通过用户名或作品标题)
+ * @access 公开
+ * @param {string} userName - 用户名 (可选)
+ * @param {string} title - 作品标题关键词 (可选)
+ * @returns {Array} 搜索结果列表
+ */
+router.get('/releases/search', releaseController.searchReleases);
+
+/**
+ * @route POST /api/releases/search
+ * @desc 搜索发布内容(通过用户名或作品标题)
+ * @access 公开
+ * @param {string} userName - 用户名 (可选)
+ * @param {string} title - 作品标题关键词 (可选)
+ * @returns {Array} 搜索结果列表
+ */
+router.post('/releases/search', releaseController.searchReleases);
+
 module.exports = router; 

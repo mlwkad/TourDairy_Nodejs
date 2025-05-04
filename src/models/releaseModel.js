@@ -305,6 +305,135 @@ const releaseModel = {
             console.error('批量获取发布内容失败:', error);
             throw error;
         }
+    },
+
+    /**
+     * 根据标题搜索发布内容
+     * @param {string} title - 要搜索的标题关键词
+     * @returns {Array} - 匹配的发布内容列表
+     */
+    searchReleasesByTitle: async (title) => {
+        try {
+            console.log(`[DEBUG] 开始搜索标题含有 "${title}" 的发布内容`);
+
+            const [rows] = await pool.query(
+                `SELECT r.*, u.userName, u.avatar 
+                FROM releases r
+                LEFT JOIN users u ON r.userID = u.userID
+                WHERE r.title LIKE ? 
+                ORDER BY r.createdAt DESC`,
+                [`%${title}%`]
+            );
+
+            console.log(`[DEBUG] 标题搜索结果数量: ${rows.length}`);
+            if (rows.length > 0) {
+                console.log(`[DEBUG] 搜索到的标题:`);
+                rows.forEach((row, index) => {
+                    console.log(`[DEBUG] ${index + 1}. "${row.title}" (ID: ${row.releaseID})`);
+                });
+            }
+
+            // 处理返回的数据，确保图片和视频是JSON对象
+            return rows.map(row => ({
+                ...row,
+                pictures: JSON.parse(row.pictures || '[]'),
+                videos: JSON.parse(row.videos || '[]')
+            }));
+        } catch (error) {
+            console.error('根据标题搜索发布内容失败:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * 根据用户名搜索发布内容
+     * @param {string} userName - 用户名
+     * @returns {Array} - 匹配的发布内容列表
+     */
+    searchReleasesByUserName: async (userName) => {
+        try {
+            const [rows] = await pool.query(
+                `SELECT r.*, u.userName, u.avatar 
+                FROM releases r
+                LEFT JOIN users u ON r.userID = u.userID
+                WHERE u.userName = ? 
+                ORDER BY r.createdAt DESC`,
+                [userName]
+            );
+
+            // 处理返回的数据，确保图片和视频是JSON对象
+            return rows.map(row => ({
+                ...row,
+                pictures: JSON.parse(row.pictures || '[]'),
+                videos: JSON.parse(row.videos || '[]')
+            }));
+        } catch (error) {
+            console.error('根据用户名搜索发布内容失败:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * 同时根据用户ID和标题搜索发布内容
+     * @param {string} userID - 用户ID
+     * @param {string} title - 标题关键词
+     * @returns {Array} - 匹配的发布内容列表
+     */
+    searchReleasesByUserIDAndTitle: async (userID, title) => {
+        try {
+            const [rows] = await pool.query(
+                `SELECT r.*, u.userName, u.avatar 
+                FROM releases r
+                LEFT JOIN users u ON r.userID = u.userID
+                WHERE r.userID = ? AND r.title LIKE ? 
+                ORDER BY r.createdAt DESC`,
+                [userID, `%${title}%`]
+            );
+
+            // 处理返回的数据，确保图片和视频是JSON对象
+            return rows.map(row => ({
+                ...row,
+                pictures: JSON.parse(row.pictures || '[]'),
+                videos: JSON.parse(row.videos || '[]')
+            }));
+        } catch (error) {
+            console.error('同时根据用户ID和标题搜索发布内容失败:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * 根据用户ID列表批量获取用户的发布内容
+     * @param {Array} userIDs - 用户ID数组
+     * @returns {Array} - 发布内容列表
+     */
+    getReleasesByUserIDs: async (userIDs) => {
+        try {
+            if (!userIDs || userIDs.length === 0) {
+                return [];
+            }
+
+            // 使用 IN 操作符查询多个用户ID
+            const placeholders = userIDs.map(() => '?').join(',');
+            const [rows] = await pool.query(
+                `SELECT r.*, u.userName, u.avatar 
+                FROM releases r
+                LEFT JOIN users u ON r.userID = u.userID
+                WHERE r.userID IN (${placeholders}) 
+                ORDER BY r.createdAt DESC`,
+                userIDs
+            );
+
+            // 处理返回的数据，确保图片和视频是JSON对象
+            return rows.map(row => ({
+                ...row,
+                pictures: JSON.parse(row.pictures || '[]'),
+                videos: JSON.parse(row.videos || '[]')
+            }));
+        } catch (error) {
+            console.error('批量获取用户发布内容失败:', error);
+            throw error;
+        }
     }
 };
 

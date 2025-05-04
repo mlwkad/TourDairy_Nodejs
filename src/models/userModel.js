@@ -327,6 +327,29 @@ const userModel = {
             console.error('移除喜欢内容失败:', error);
             throw error;
         }
+    },
+
+    /**
+     * 根据用户名模糊搜索用户
+     * @param {string} userName - 用户名关键词
+     * @returns {Array} - 匹配的用户列表
+     */
+    searchUsersByName: async (userName) => {
+        try {
+            const [rows] = await pool.query(
+                'SELECT * FROM users WHERE userName LIKE ?',
+                [`%${userName}%`]
+            );
+
+            // 移除密码字段
+            return rows.map(user => {
+                const { passWord, ...userWithoutPassword } = user;
+                return userWithoutPassword;
+            });
+        } catch (error) {
+            console.error('搜索用户失败:', error);
+            throw error;
+        }
     }
 };
 

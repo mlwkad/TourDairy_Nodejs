@@ -402,6 +402,127 @@ const releaseController = {
                 error: error.message
             });
         }
+    },
+
+    /**
+     * 搜索发布内容接口
+     * 通过用户名或作品标题搜索
+     * @param {Object} req.query - 查询参数
+     * @param {string} req.query.userName - 用户名（可选）
+     * @param {string} req.query.title - 作品标题关键词（可选）
+     * @returns {Array} - 搜索结果列表
+     */
+    searchReleases: async (req, res) => {
+        try {
+            // 从query或body中获取参数
+            const userName = req.query.userName || req.body.userName;
+            const title = req.query.title || req.body.title;
+
+            console.log(`[DEBUG] 搜索请求参数: userName="${userName}", title="${title}"`);
+
+            // 参数验证 - 至少提供一个搜索条件
+            if (!userName && !title) {
+                return res.status(400).json({
+                    success: false,
+                    message: '请提供用户名或作品标题作为搜索条件'
+                });
+            }
+
+            // 用于存储不同类型的搜索结果
+            let userNameResults = [];
+            let titleResults = [];
+            let originalTitleResults = []; // 保存原始的标题搜索结果
+
+            // 如果提供了用户名，模糊搜索用户名
+            if (userName) {
+                // 使用模糊搜索找到所有匹配的用户
+                const matchedUsers = await userModel.searchUsersByName(userName);
+                console.log(`[DEBUG] 匹配用户名的用户数量: ${matchedUsers.length}`);
+
+                if (matchedUsers.length > 0) {
+                    // 获取这些用户的ID
+                    const userIDs = matchedUsers.map(user => user.userID);
+                    console.log(`[DEBUG] 匹配用户的ID: ${userIDs.join(', ')}`);
+
+                    // 获取这些用户发布的所有内容
+                    userNameResults = await releaseModel.getReleasesByUserIDs(userIDs);
+                    console.log(`[DEBUG] 匹配用户发布的内容数量: ${userNameResults.length}`);
+                }
+            }
+
+            // 如果提供了标题，搜索标题中包含关键词的内容
+            if (title) {
+                originalTitleResults = await releaseModel.searchReleasesByTitle(title);
+                console.log(`[DEBUG] 原始标题搜索结果数量: ${originalTitleResults.length}`);
+
+                // 不再去重，保留原始搜索结果
+                titleResults = originalTitleResults;
+            }
+
+            // 找出同时匹配用户名和标题的内容
+            let bothResults = [];
+            if (userNameResults.length > 0 && titleResults.length > 0) {
+                const userNameReleaseIDs = userNameResults.map(item => item.releaseID);
+                bothResults = titleResults.filter(item =>
+                    userNameReleaseIDs.includes(item.releaseID)
+                );
+            }
+
+            // 构建结果并添加来源标记
+            const userNameResultsWithSource = userNameResults.map(item => ({
+                ...item,
+                matchSource: bothResults.some(r => r.releaseID === item.releaseID) ? ['userName', 'title'] : ['userName']
+            }));
+
+            const titleResultsWithSource = titleResults.map(item => ({
+                ...item,
+                matchSource: bothResults.some(r => r.releaseID === item.releaseID) ? ['userName', 'title'] : ['title']
+            }));
+
+            // 汇总所有不重复的结果
+            // 注意：为避免重复，我们不直接合并 userNameResultsWithSource 和 titleResultsWithSource
+            const uniqueReleaseIDs = new Set();
+            const totalResults = [];
+
+            userNameResultsWithSource.forEach(item => {
+                if (!uniqueReleaseIDs.has(item.releaseID)) {
+                    uniqueReleaseIDs.add(item.releaseID);
+                    totalResults.push(item);
+                }
+            });
+
+            titleResultsWithSource.forEach(item => {
+                if (!uniqueReleaseIDs.has(item.releaseID)) {
+                    uniqueReleaseIDs.add(item.releaseID);
+                    totalResults.push(item);
+                }
+            });
+
+            // 调试信息
+            console.log(`[DEBUG] 最终结果统计:`);
+            console.log(`[DEBUG] - 用户名匹配结果: ${userNameResultsWithSource.length}`);
+            console.log(`[DEBUG] - 标题匹配结果: ${titleResultsWithSource.length}`);
+            console.log(`[DEBUG] - 两者都匹配: ${bothResults.length}`);
+            console.log(`[DEBUG] - 去重后总结果数: ${totalResults.length}`);
+
+            res.status(200).json({
+                success: true,
+                message: totalResults.length > 0 ? '搜索发布内容成功' : '未找到符合条件的发布内容',
+                data: {
+                    byUserName: userNameResultsWithSource,
+                    byTitle: titleResultsWithSource,
+                    byBoth: bothResults.length, // 添加同时匹配两者的数量
+                    total: totalResults.length
+                }
+            });
+        } catch (error) {
+            console.error('搜索发布内容失败:', error);
+            res.status(500).json({
+                success: false,
+                message: '服务器错误',
+                error: error.message
+            });
+        }
     }
 };
 
