@@ -19,7 +19,10 @@ const releaseModel = {
      * - content: 内容描述（字符串）
      * - pictures: 图片URL数组（TEXT格式存储JSON字符串）
      * - videos: 视频URL数组（TEXT格式存储JSON字符串）
+     * - cover: 视频封面URL（字符串）
      * - location: 位置（字符串）
+     * - state: 审核状态（字符串）'wait'、'resolve'、'reject'
+     * - reason: 未通过原因（字符串）
      */
     initTable: async () => {
         try {
@@ -35,7 +38,10 @@ const releaseModel = {
           content TEXT,
           pictures TEXT,
           videos TEXT,
+          cover VARCHAR(255),
           location VARCHAR(255),
+          state VARCHAR(20) DEFAULT 'wait',
+          reason VARCHAR(255) DEFAULT '待审核',
           createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           FOREIGN KEY (userID) REFERENCES users(userID) ON DELETE CASCADE
@@ -62,11 +68,11 @@ const releaseModel = {
         try {
             // 插入测试发布内容
             await pool.query(`
-        INSERT INTO releases (releaseID, userID, title, playTime, money, personNum, content, pictures, videos, location) VALUES
-        ('release1', 'user1', '北京三日游从您提供的前端API接口来看', 120, 500.00, 2, '这是一个测试发布内容1', '["https://example.com/pic1.jpg", "https://example.com/pic2.jpg"]', '["https://example.com/video1.mp4"]', '北京市海淀区'),
-        ('release2', 'user1', '上海周末游从您提供的前端API接口来看，不需要修改这些接口的定义', 180, 800.00, 3, '这是一个测试发布内容2', '["https://example.com/pic3.jpg"]', '[]', '上海市浦东新区'),
-        ('release3', 'user2', '广州一日游', 90, 300.00, 1, '这是一个测试发布内容3', '["https://example.com/pic4.jpg", "https://example.com/pic5.jpg"]', '[]', '广州市天河区'),
-        ('release4', 'user2', '从您提供的前端API接口来看', 240, 1200.00, 4, '这是一个测试发布内容4', '[]', '["https://example.com/video2.mp4"]', '深圳市南山区')
+        INSERT INTO releases (releaseID, userID, title, playTime, money, personNum, content, pictures, videos, cover, location, state, reason) VALUES
+        ('release1', 'user1', '北京三日游从您提供的前端API接口来看', 120, 500.00, 2, '这是一个测试发布内容1', '["https://example.com/pic1.jpg", "https://example.com/pic2.jpg"]', '["https://example.com/video1.mp4"]', 'https://example.com/cover1.jpg', '北京市海淀区', 'resolve', ''),
+        ('release2', 'user1', '上海周末游从您提供的前端API接口来看，不需要修改这些接口的定义', 180, 800.00, 3, '这是一个测试发布内容2', '["https://example.com/pic3.jpg"]', '[]', 'https://example.com/cover2.jpg', '上海市浦东新区', 'resolve', ''),
+        ('release3', 'user2', '广州一日游', 90, 300.00, 1, '这是一个测试发布内容3', '["https://example.com/pic4.jpg", "https://example.com/pic5.jpg"]', '[]', NULL, '广州市天河区', 'wait', '待审核'),
+        ('release4', 'user2', '从您提供的前端API接口来看', 240, 1200.00, 4, '这是一个测试发布内容4', '[]', '["https://example.com/video2.mp4"]', 'https://example.com/cover4.jpg', '深圳市南山区', 'reject', '内容不符合规范')
       `);
 
             console.log('测试发布内容数据已插入');
@@ -80,16 +86,18 @@ const releaseModel = {
      * 获取所有发布内容
      * @param {number} limit - 限制条数，默认为50
      * @param {number} offset - 偏移量，默认为0
+     * @param {string} state - 审核状态，默认为'resolve'
      * @returns {Array} - 发布内容列表
      */
-    getAllReleases: async (limit = 50, offset = 0) => {
+    getAllReleases: async (limit = 50, offset = 0, state = 'resolve') => {
         try {
             const [rows] = await pool.query(
                 `SELECT r.*, u.userName, u.avatar 
                 FROM releases r
                 LEFT JOIN users u ON r.userID = u.userID
+                WHERE r.state = ?
                 ORDER BY r.createdAt DESC LIMIT ? OFFSET ?`,
-                [limit, offset]
+                [state, limit, offset]
             );
 
             // 处理返回的数据，确保图片和视频是JSON对象
@@ -179,6 +187,7 @@ const releaseModel = {
                 content,
                 pictures,
                 videos,
+                cover,
                 location
             } = releaseData;
 
@@ -192,12 +201,12 @@ const releaseModel = {
             const picturesJSON = pictures ? JSON.stringify(pictures) : '[]';
             const videosJSON = videos ? JSON.stringify(videos) : '[]';
 
-            // 插入新发布内容
+            // 插入新发布内容，默认审核状态为wait，原因为待审核
             await pool.query(
                 `INSERT INTO releases 
-         (releaseID, userID, title, playTime, money, personNum, content, pictures, videos, location) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [releaseID, userID, title, playTime, money, personNum, content, picturesJSON, videosJSON, location]
+         (releaseID, userID, title, playTime, money, personNum, content, pictures, videos, cover, location, state, reason) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'wait', '待审核')`,
+                [releaseID, userID, title, playTime, money, personNum, content, picturesJSON, videosJSON, cover || null, location]
             );
 
             // 返回创建的发布内容
@@ -216,7 +225,7 @@ const releaseModel = {
      */
     updateRelease: async (releaseID, updateData) => {
         try {
-            const allowedFields = ['title', 'playTime', 'money', 'personNum', 'content', 'pictures', 'videos', 'location'];
+            const allowedFields = ['title', 'playTime', 'money', 'personNum', 'content', 'pictures', 'videos', 'cover', 'location', 'state', 'reason'];
             const updates = [];
             const values = [];
 
@@ -251,6 +260,47 @@ const releaseModel = {
             return await releaseModel.getReleaseByID(releaseID);
         } catch (error) {
             console.error('更新发布内容失败:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * 更新游记审核状态
+     * @param {string} releaseID - 发布内容ID
+     * @param {string} state - 审核状态 'wait', 'resolve', 'reject'
+     * @param {string} reason - 未通过原因（当状态为reject时必须提供）
+     * @returns {Object} - 更新后的发布内容
+     */
+    updateReleaseState: async (releaseID, state, reason) => {
+        try {
+            // 验证状态值
+            if (!['wait', 'resolve', 'reject'].includes(state)) {
+                throw new Error('无效的审核状态值');
+            }
+
+            // 如果状态为reject，必须提供原因
+            if (state === 'reject' && (!reason || reason.trim() === '')) {
+                throw new Error('拒绝时必须提供原因');
+            }
+
+            // 设置默认原因
+            let updatedReason = reason;
+            if (state === 'wait') {
+                updatedReason = '待审核';
+            } else if (state === 'resolve' && (!reason || reason.trim() === '')) {
+                updatedReason = '';
+            }
+
+            // 执行更新
+            await pool.query(
+                `UPDATE releases SET state = ?, reason = ? WHERE releaseID = ?`,
+                [state, updatedReason, releaseID]
+            );
+
+            // 返回更新后的发布内容
+            return await releaseModel.getReleaseByID(releaseID);
+        } catch (error) {
+            console.error('更新游记审核状态失败:', error);
             throw error;
         }
     },
@@ -310,19 +360,20 @@ const releaseModel = {
     /**
      * 根据标题搜索发布内容
      * @param {string} title - 要搜索的标题关键词
+     * @param {string} state - 审核状态，默认为'resolve'
      * @returns {Array} - 匹配的发布内容列表
      */
-    searchReleasesByTitle: async (title) => {
+    searchReleasesByTitle: async (title, state = 'resolve') => {
         try {
-            console.log(`[DEBUG] 开始搜索标题含有 "${title}" 的发布内容`);
+            console.log(`[DEBUG] 开始搜索标题含有 "${title}" 的发布内容，状态为 ${state}`);
 
             const [rows] = await pool.query(
                 `SELECT r.*, u.userName, u.avatar 
                 FROM releases r
                 LEFT JOIN users u ON r.userID = u.userID
-                WHERE r.title LIKE ? 
+                WHERE r.title LIKE ? AND r.state = ?
                 ORDER BY r.createdAt DESC`,
-                [`%${title}%`]
+                [`%${title}%`, state]
             );
 
             console.log(`[DEBUG] 标题搜索结果数量: ${rows.length}`);
@@ -348,17 +399,18 @@ const releaseModel = {
     /**
      * 根据用户名搜索发布内容
      * @param {string} userName - 用户名
+     * @param {string} state - 审核状态，默认为'resolve'
      * @returns {Array} - 匹配的发布内容列表
      */
-    searchReleasesByUserName: async (userName) => {
+    searchReleasesByUserName: async (userName, state = 'resolve') => {
         try {
             const [rows] = await pool.query(
                 `SELECT r.*, u.userName, u.avatar 
                 FROM releases r
                 LEFT JOIN users u ON r.userID = u.userID
-                WHERE u.userName = ? 
+                WHERE u.userName = ? AND r.state = ?
                 ORDER BY r.createdAt DESC`,
-                [userName]
+                [userName, state]
             );
 
             // 处理返回的数据，确保图片和视频是JSON对象
@@ -405,9 +457,10 @@ const releaseModel = {
     /**
      * 根据用户ID列表批量获取用户的发布内容
      * @param {Array} userIDs - 用户ID数组
+     * @param {string} state - 审核状态，默认为'resolve'
      * @returns {Array} - 发布内容列表
      */
-    getReleasesByUserIDs: async (userIDs) => {
+    getReleasesByUserIDs: async (userIDs, state = 'resolve') => {
         try {
             if (!userIDs || userIDs.length === 0) {
                 return [];
@@ -415,13 +468,15 @@ const releaseModel = {
 
             // 使用 IN 操作符查询多个用户ID
             const placeholders = userIDs.map(() => '?').join(',');
+            const parameters = [...userIDs, state];
+
             const [rows] = await pool.query(
                 `SELECT r.*, u.userName, u.avatar 
                 FROM releases r
                 LEFT JOIN users u ON r.userID = u.userID
-                WHERE r.userID IN (${placeholders}) 
+                WHERE r.userID IN (${placeholders}) AND r.state = ?
                 ORDER BY r.createdAt DESC`,
-                userIDs
+                parameters
             );
 
             // 处理返回的数据，确保图片和视频是JSON对象

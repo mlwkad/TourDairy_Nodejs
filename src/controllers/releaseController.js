@@ -12,12 +12,14 @@ const releaseController = {
      * @param {Object} req.query - 查询参数
      * @param {number} req.query.limit - 限制条数，默认为50
      * @param {number} req.query.offset - 偏移量，默认为0
+     * @param {string} req.query.state - 审核状态，默认为'resolve'
      * @returns {Array} - 发布内容列表
      */
     getAllReleases: async (req, res) => {
         try {
             const limit = parseInt(req.query.limit) || 50;
             const offset = parseInt(req.query.offset) || 0;
+            const state = req.query.state || 'resolve';
 
             // 参数验证
             if (limit < 1 || limit > 100) {
@@ -34,8 +36,15 @@ const releaseController = {
                 });
             }
 
+            if (!['wait', 'resolve', 'reject'].includes(state)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'state参数必须为wait、resolve或reject'
+                });
+            }
+
             // 获取所有发布内容
-            const releases = await releaseModel.getAllReleases(limit, offset);
+            const releases = await releaseModel.getAllReleases(limit, offset, state);
 
             res.status(200).json({
                 success: true,
@@ -112,6 +121,7 @@ const releaseController = {
      * @param {string} req.body.content - 内容描述
      * @param {Array} req.body.pictures - 图片URL数组 (可选)
      * @param {Array} req.body.videos - 视频URL数组 (可选)
+     * @param {string} req.body.cover - 视频封面URL (可选)
      * @param {string} req.body.location - 位置
      * @returns {Object} - 创建的发布内容
      */
@@ -126,6 +136,7 @@ const releaseController = {
                 content,
                 pictures,
                 videos,
+                cover,
                 location
             } = req.body;
 
@@ -188,6 +199,7 @@ const releaseController = {
                 content,
                 pictures: pictures || [],
                 videos: videos || [],
+                cover,
                 location
             });
 
@@ -214,6 +226,7 @@ const releaseController = {
      * @param {Object} req.params - 请求参数
      * @param {string} req.params.releaseID - 发布内容ID
      * @param {Object} req.body - 请求体
+     * @param {string} req.body.userID - 用户ID (用于权限验证)
      * @param {string} req.body.title - 标题 (可选)
      * @param {number} req.body.playTime - 游玩时间（分钟）(可选)
      * @param {number} req.body.money - 费用 (可选)
@@ -221,6 +234,7 @@ const releaseController = {
      * @param {string} req.body.content - 内容描述 (可选)
      * @param {Array} req.body.pictures - 图片URL数组 (可选)
      * @param {Array} req.body.videos - 视频URL数组 (可选)
+     * @param {string} req.body.cover - 视频封面URL (可选)
      * @param {string} req.body.location - 位置 (可选)
      * @returns {Object} - 更新后的发布内容
      */
@@ -228,6 +242,7 @@ const releaseController = {
         try {
             const { releaseID } = req.params;
             const {
+                userID, // 用于权限验证
                 title,
                 playTime,
                 money,
@@ -235,6 +250,7 @@ const releaseController = {
                 content,
                 pictures,
                 videos,
+                cover,
                 location
             } = req.body;
 
@@ -243,23 +259,6 @@ const releaseController = {
                 return res.status(400).json({
                     success: false,
                     message: '发布内容ID不能为空'
-                });
-            }
-
-            // 检查至少提供一个要更新的字段
-            if (
-                title === undefined &&
-                playTime === undefined &&
-                money === undefined &&
-                personNum === undefined &&
-                content === undefined &&
-                pictures === undefined &&
-                videos === undefined &&
-                location === undefined
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    message: '至少提供一个要更新的字段'
                 });
             }
 
@@ -272,6 +271,32 @@ const releaseController = {
                 });
             }
 
+            // 检查用户是否有权限更新
+            if (userID && release.userID !== userID) {
+                return res.status(403).json({
+                    success: false,
+                    message: '没有权限更新该发布内容'
+                });
+            }
+
+            // 检查至少提供一个要更新的字段
+            if (
+                title === undefined &&
+                playTime === undefined &&
+                money === undefined &&
+                personNum === undefined &&
+                content === undefined &&
+                pictures === undefined &&
+                videos === undefined &&
+                cover === undefined &&
+                location === undefined
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: '至少提供一个要更新的字段'
+                });
+            }
+
             // 构建更新数据
             const updateData = {};
             if (title !== undefined) updateData.title = title;
@@ -281,7 +306,14 @@ const releaseController = {
             if (content !== undefined) updateData.content = content;
             if (pictures !== undefined) updateData.pictures = pictures;
             if (videos !== undefined) updateData.videos = videos;
+            if (cover !== undefined) updateData.cover = cover;
             if (location !== undefined) updateData.location = location;
+
+            // 用户编辑游记后，状态重置为待审核
+            if (userID) {
+                updateData.state = 'wait';
+                updateData.reason = '待审核';
+            }
 
             // 更新发布内容
             const updatedRelease = await releaseModel.updateRelease(releaseID, updateData);
@@ -293,6 +325,77 @@ const releaseController = {
             });
         } catch (error) {
             console.error('更新发布内容失败:', error);
+            res.status(500).json({
+                success: false,
+                message: '服务器错误',
+                error: error.message
+            });
+        }
+    },
+
+    /**
+     * 更新游记审核状态接口
+     * @param {Object} req.params - 请求参数
+     * @param {string} req.params.releaseID - 发布内容ID
+     * @param {Object} req.body - 请求体
+     * @param {string} req.body.state - 审核状态 'wait', 'resolve', 'reject'
+     * @param {string} req.body.reason - 未通过原因（当状态为reject时必须提供）
+     * @returns {Object} - 更新后的发布内容
+     */
+    updateReleaseState: async (req, res) => {
+        try {
+            const { releaseID } = req.params;
+            const { state, reason } = req.body;
+
+            // 参数验证
+            if (!releaseID) {
+                return res.status(400).json({
+                    success: false,
+                    message: '发布内容ID不能为空'
+                });
+            }
+
+            if (!state) {
+                return res.status(400).json({
+                    success: false,
+                    message: '审核状态不能为空'
+                });
+            }
+
+            if (!['wait', 'resolve', 'reject'].includes(state)) {
+                return res.status(400).json({
+                    success: false,
+                    message: '无效的审核状态值'
+                });
+            }
+
+            // 检查发布内容是否存在
+            const release = await releaseModel.getReleaseByID(releaseID);
+            if (!release) {
+                return res.status(404).json({
+                    success: false,
+                    message: '发布内容不存在'
+                });
+            }
+
+            // 当状态为reject时，必须提供reason
+            if (state === 'reject' && (!reason || reason.trim() === '')) {
+                return res.status(400).json({
+                    success: false,
+                    message: '拒绝时必须提供原因'
+                });
+            }
+
+            // 更新发布内容状态
+            const updatedRelease = await releaseModel.updateReleaseState(releaseID, state, reason || '');
+
+            res.status(200).json({
+                success: true,
+                message: '更新游记审核状态成功',
+                data: updatedRelease
+            });
+        } catch (error) {
+            console.error('更新游记审核状态失败:', error);
             res.status(500).json({
                 success: false,
                 message: '服务器错误',
@@ -410,6 +513,7 @@ const releaseController = {
      * @param {Object} req.query - 查询参数
      * @param {string} req.query.userName - 用户名（可选）
      * @param {string} req.query.title - 作品标题关键词（可选）
+     * @param {string} req.query.state - 审核状态，默认为'resolve'
      * @returns {Array} - 搜索结果列表
      */
     searchReleases: async (req, res) => {
@@ -417,14 +521,22 @@ const releaseController = {
             // 从query或body中获取参数
             const userName = req.query.userName || req.body.userName;
             const title = req.query.title || req.body.title;
+            const state = req.query.state || req.body.state || 'resolve';
 
-            console.log(`[DEBUG] 搜索请求参数: userName="${userName}", title="${title}"`);
+            console.log(`[DEBUG] 搜索请求参数: userName="${userName}", title="${title}", state="${state}"`);
 
             // 参数验证 - 至少提供一个搜索条件
             if (!userName && !title) {
                 return res.status(400).json({
                     success: false,
                     message: '请提供用户名或作品标题作为搜索条件'
+                });
+            }
+
+            if (!['wait', 'resolve', 'reject'].includes(state)) {
+                return res.status(400).json({
+                    success: false,
+                    message: '无效的审核状态值'
                 });
             }
 
@@ -445,14 +557,14 @@ const releaseController = {
                     console.log(`[DEBUG] 匹配用户的ID: ${userIDs.join(', ')}`);
 
                     // 获取这些用户发布的所有内容
-                    userNameResults = await releaseModel.getReleasesByUserIDs(userIDs);
+                    userNameResults = await releaseModel.getReleasesByUserIDs(userIDs, state);
                     console.log(`[DEBUG] 匹配用户发布的内容数量: ${userNameResults.length}`);
                 }
             }
 
             // 如果提供了标题，搜索标题中包含关键词的内容
             if (title) {
-                originalTitleResults = await releaseModel.searchReleasesByTitle(title);
+                originalTitleResults = await releaseModel.searchReleasesByTitle(title, state);
                 console.log(`[DEBUG] 原始标题搜索结果数量: ${originalTitleResults.length}`);
 
                 // 不再去重，保留原始搜索结果
