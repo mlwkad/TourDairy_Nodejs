@@ -85,4 +85,33 @@ router.post('/user/:userID/liked', userController.addLiked);
  */
 router.delete('/user/:userID/liked/:releaseID', userController.removeLiked);
 
+/**
+ * @route POST /api/user/:userID/follow
+ * @desc 关注用户
+ * @access 公开
+ * @param {string} userID - 当前用户ID
+ * @param {string} followUserID - 要关注的用户ID
+ * @returns {Object} 成功消息
+ */
+router.post('/user/:userID/follow', userController.followUser);
+
+/**
+ * @route DELETE /api/user/:userID/follow/:followUserID
+ * @desc 取消关注用户
+ * @access 公开
+ * @param {string} userID - 当前用户ID
+ * @param {string} followUserID - 要取消关注的用户ID
+ * @returns {Object} 成功消息
+ */
+router.delete('/user/:userID/follow/:followUserID', userController.unfollowUser);
+
+/**
+ * @route GET /api/user/:userID/following
+ * @desc 获取用户关注列表
+ * @access 公开
+ * @param {string} userID - 用户ID
+ * @returns {Array} 关注的用户ID列表
+ */
+router.get('/user/:userID/following', userController.getUserFollowing);
+
 module.exports = router; 

@@ -16,6 +16,7 @@ const userModel = {
      * - userID: 用户ID（字符串）
      * - release: 发布的内容ID列表（TEXT格式存储JSON字符串）
      * - liked: 喜欢的内容ID列表（TEXT格式存储JSON字符串）
+     * - follow: 关注的用户ID列表（TEXT格式存储JSON字符串）
      * - avatar: 头像URL（字符串）
      */
     initTable: async () => {
@@ -28,6 +29,7 @@ const userModel = {
           passWord VARCHAR(100) NOT NULL,
           \`release\` TEXT,
           liked TEXT,
+          follow TEXT,
           avatar VARCHAR(255) DEFAULT NULL,
           createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -58,9 +60,9 @@ const userModel = {
 
             // 插入测试用户
             await pool.query(`
-        INSERT INTO users (userID, userName, passWord, \`release\`, liked, avatar) VALUES
-        ('user1', 'testuser1', ?, '["release1", "release2"]', '["release3", "release4"]', 'https://example.com/avatar1.jpg'),
-        ('user2', 'testuser2', ?, '["release3"]', '["release1", "release2"]', 'https://example.com/avatar2.jpg')
+        INSERT INTO users (userID, userName, passWord, \`release\`, liked, follow, avatar) VALUES
+        ('user1', 'testuser1', ?, '["release1", "release2"]', '["release3", "release4"]', '[]', 'https://example.com/avatar1.jpg'),
+        ('user2', 'testuser2', ?, '["release3"]', '["release1", "release2"]', '[]', 'https://example.com/avatar2.jpg')
       `, [hashedPassword1, hashedPassword2]);
 
             console.log('测试用户数据已插入');
@@ -120,8 +122,8 @@ const userModel = {
 
             // 插入新用户
             await pool.query(
-                'INSERT INTO users (userID, userName, passWord, `release`, liked, avatar) VALUES (?, ?, ?, ?, ?, ?)',
-                [userID, userName, hashedPassword, '[]', '[]', avatar || null]
+                'INSERT INTO users (userID, userName, passWord, `release`, liked, follow, avatar) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [userID, userName, hashedPassword, '[]', '[]', '[]', avatar || null]
             );
 
             // 返回创建的用户(不含密码)
@@ -348,6 +350,111 @@ const userModel = {
             });
         } catch (error) {
             console.error('搜索用户失败:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * 添加关注用户
+     * @param {string} userID - 当前用户ID
+     * @param {string} followUserID - 要关注的用户ID
+     * @returns {boolean} - 操作是否成功
+     */
+    followUser: async (userID, followUserID) => {
+        try {
+            // 获取用户当前的follow数组
+            const [rows] = await pool.query(
+                'SELECT follow FROM users WHERE userID = ?',
+                [userID]
+            );
+
+            if (rows.length === 0) {
+                throw new Error('用户不存在');
+            }
+
+            // 解析JSON数组
+            const follows = JSON.parse(rows[0].follow || '[]');
+
+            // 检查followUserID是否已存在
+            if (!follows.includes(followUserID)) {
+                // 验证要关注的用户是否存在
+                const followUser = await userModel.findByUserID(followUserID);
+                if (!followUser) {
+                    throw new Error('要关注的用户不存在');
+                }
+
+                follows.push(followUserID);
+
+                // 更新数据库
+                await pool.query(
+                    'UPDATE users SET follow = ? WHERE userID = ?',
+                    [JSON.stringify(follows), userID]
+                );
+            }
+
+            return true;
+        } catch (error) {
+            console.error('添加关注失败:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * 取消关注用户
+     * @param {string} userID - 当前用户ID
+     * @param {string} followUserID - 要取消关注的用户ID
+     * @returns {boolean} - 操作是否成功
+     */
+    unfollowUser: async (userID, followUserID) => {
+        try {
+            // 获取用户当前的follow数组
+            const [rows] = await pool.query(
+                'SELECT follow FROM users WHERE userID = ?',
+                [userID]
+            );
+
+            if (rows.length === 0) {
+                throw new Error('用户不存在');
+            }
+
+            // 解析JSON数组
+            const follows = JSON.parse(rows[0].follow || '[]');
+
+            // 移除followUserID
+            const newFollows = follows.filter(id => id !== followUserID);
+
+            // 更新数据库
+            await pool.query(
+                'UPDATE users SET follow = ? WHERE userID = ?',
+                [JSON.stringify(newFollows), userID]
+            );
+
+            return true;
+        } catch (error) {
+            console.error('取消关注失败:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * 获取用户关注列表
+     * @param {string} userID - 用户ID
+     * @returns {Array} - 关注的用户ID列表
+     */
+    getUserFollowing: async (userID) => {
+        try {
+            const [rows] = await pool.query(
+                'SELECT follow FROM users WHERE userID = ?',
+                [userID]
+            );
+
+            if (rows.length === 0) {
+                throw new Error('用户不存在');
+            }
+
+            return JSON.parse(rows[0].follow || '[]');
+        } catch (error) {
+            console.error('获取关注列表失败:', error);
             throw error;
         }
     }

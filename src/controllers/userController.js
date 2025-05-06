@@ -464,6 +464,160 @@ const userController = {
                 error: error.message
             });
         }
+    },
+
+    /**
+     * 关注用户接口
+     * @param {Object} req.params - 请求参数
+     * @param {string} req.params.userID - 当前用户ID
+     * @param {Object} req.body - 请求体
+     * @param {string} req.body.followUserID - 要关注的用户ID
+     * @returns {Object} - 成功消息
+     */
+    followUser: async (req, res) => {
+        try {
+            const { userID } = req.params;
+            const { followUserID } = req.body;
+
+            // 参数验证
+            if (!userID || !followUserID) {
+                return res.status(400).json({
+                    success: false,
+                    message: '用户ID和要关注的用户ID不能为空'
+                });
+            }
+
+            // 检查不能关注自己
+            if (userID === followUserID) {
+                return res.status(400).json({
+                    success: false,
+                    message: '不能关注自己'
+                });
+            }
+
+            // 检查当前用户是否存在
+            const user = await userModel.findByUserID(userID);
+            if (!user) {
+                return res.status(404).json({
+                    success: false,
+                    message: '用户不存在'
+                });
+            }
+
+            // 检查要关注的用户是否存在
+            const followUser = await userModel.findByUserID(followUserID);
+            if (!followUser) {
+                return res.status(404).json({
+                    success: false,
+                    message: '要关注的用户不存在'
+                });
+            }
+
+            // 添加关注
+            await userModel.followUser(userID, followUserID);
+
+            res.status(200).json({
+                success: true,
+                message: '关注成功'
+            });
+        } catch (error) {
+            console.error('关注用户失败:', error);
+            res.status(500).json({
+                success: false,
+                message: '服务器错误',
+                error: error.message
+            });
+        }
+    },
+
+    /**
+     * 取消关注用户接口
+     * @param {Object} req.params - 请求参数
+     * @param {string} req.params.userID - 当前用户ID
+     * @param {string} req.params.followUserID - 要取消关注的用户ID
+     * @returns {Object} - 成功消息
+     */
+    unfollowUser: async (req, res) => {
+        try {
+            const { userID, followUserID } = req.params;
+
+            // 参数验证
+            if (!userID || !followUserID) {
+                return res.status(400).json({
+                    success: false,
+                    message: '用户ID和要取消关注的用户ID不能为空'
+                });
+            }
+
+            // 检查当前用户是否存在
+            const user = await userModel.findByUserID(userID);
+            if (!user) {
+                return res.status(404).json({
+                    success: false,
+                    message: '用户不存在'
+                });
+            }
+
+            // 取消关注
+            await userModel.unfollowUser(userID, followUserID);
+
+            res.status(200).json({
+                success: true,
+                message: '取消关注成功'
+            });
+        } catch (error) {
+            console.error('取消关注用户失败:', error);
+            res.status(500).json({
+                success: false,
+                message: '服务器错误',
+                error: error.message
+            });
+        }
+    },
+
+    /**
+     * 获取用户关注列表接口
+     * @param {Object} req.params - 请求参数
+     * @param {string} req.params.userID - 用户ID
+     * @returns {Array} - 关注的用户ID列表
+     */
+    getUserFollowing: async (req, res) => {
+        try {
+            const { userID } = req.params;
+
+            // 参数验证
+            if (!userID) {
+                return res.status(400).json({
+                    success: false,
+                    message: '用户ID不能为空'
+                });
+            }
+
+            // 检查用户是否存在
+            const user = await userModel.findByUserID(userID);
+            if (!user) {
+                return res.status(404).json({
+                    success: false,
+                    message: '用户不存在'
+                });
+            }
+
+            // 获取关注列表
+            const followingList = await userModel.getUserFollowing(userID);
+
+            res.status(200).json({
+                success: true,
+                message: '获取关注列表成功',
+                data: followingList
+            });
+        } catch (error) {
+            console.error('获取关注列表失败:', error);
+            res.status(500).json({
+                success: false,
+                message: '服务器错误',
+                error: error.message
+            });
+        }
     }
 };
 
