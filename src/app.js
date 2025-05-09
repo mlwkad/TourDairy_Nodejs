@@ -2,101 +2,79 @@
  * 主应用文件
  * 配置Express服务器和路由
  */
-const express = require('express');
-const bodyParser = require('body-parser');
-const cors = require('cors');
-const path = require('path');
-
-
-
-
-const http = require('http');
-const WebSocket = require('ws');
-
-
-
-
-const userRoutes = require('./routes/userRoutes');
-const releaseRoutes = require('./routes/releaseRoutes');
-const uploadRoutes = require('./routes/uploadRoutes');
-const userModel = require('./models/userModel');
-const releaseModel = require('./models/releaseModel');
-const chatController = require('./controllers/chatController');
+const express = require('express')
+const bodyParser = require('body-parser')
+const cors = require('cors')
+const path = require('path')
+const userRoutes = require('./routes/userRoutes')
+const releaseRoutes = require('./routes/releaseRoutes')
+const uploadRoutes = require('./routes/uploadRoutes')
+const userModel = require('./models/userModel')
+const releaseModel = require('./models/releaseModel')
+const chatController = require('./controllers/chatController')
 
 // 初始化 Express 应用
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-
-
-
-
-const server = http.createServer(app);
+const app = express()
+const PORT = process.env.PORT || 3000
 
 // 创建WebSocket服务器
-const wss = new WebSocket.Server({ server });
+const http = require('http')
+const WebSocket = require('ws')
+const server = http.createServer(app)
+// WebSocket服务的实例,表示整个 WebSocket 服务器,负责与客户端连接
+const wss = new WebSocket.Server({ server })
 
 // WebSocket连接处理
-wss.on('connection', (ws) => {
-    console.log('WebSocket客户端已连接');
-
+wss.on('connection', (ws) => {  // WebSocket 的实例,表示单个客户端与服务器的连接
+    console.log('有ws客户端连接')
     // 添加心跳检测
     const heartbeat = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'ping' }));
+            // WebSocket.CONNECTING（值为 0）：连接正在建立
+            // WebSocket.OPEN（值为 1）：连接已建立并可通信
+            // WebSocket.CLOSING（值为 2）：连接正在关闭
+            // WebSocket.CLOSED（值为 3）：连接已关闭或无法打开
+            // ws.readyState (值为以上其一)
+            ws.send(JSON.stringify({ type: 'ping' }))
         }
-    }, 30000);
-
+    }, 30000)
     // 处理接收到的消息
     ws.on('message', async (message) => {
-        console.log('收到WebSocket消息:', message.toString());
         try {
-            const data = JSON.parse(message);
-            console.log('解析后的消息数据:', data);
-
+            const data = JSON.parse(message)
             if (data.type === 'chat') {
                 console.log('处理聊天消息:', data.message);
                 // 调用聊天控制器处理WebSocket消息
-                await chatController.handleWebSocketChat(data.message, ws);
+                await chatController.webSocketChat(data.message, ws)
             } else {
-                console.log('未知的消息类型:', data.type);
                 ws.send(JSON.stringify({
                     type: 'error',
                     error: '未知的消息类型'
-                }));
+                }))
             }
         } catch (error) {
-            console.error('WebSocket消息处理错误:', error);
-            console.error('原始消息内容:', message.toString());
             ws.send(JSON.stringify({
                 type: 'error',
                 error: '消息处理失败: ' + error.message
-            }));
+            }))
         }
-    });
-
+    })
     // 处理连接关闭
     ws.on('close', () => {
-        console.log('WebSocket客户端已断开连接');
-        clearInterval(heartbeat);
-    });
-
+        console.log('ws服务器断开')
+        clearInterval(heartbeat)
+    })
     // 处理错误
     ws.on('error', (error) => {
-        console.error('WebSocket错误:', error);
-        clearInterval(heartbeat);
-    });
-
-    // 发送连接成功消息
-    ws.send(JSON.stringify({
-        type: 'chat',
-        content: '服务器连接成功'
-    }));
-});
-
-
-
-
+        console.error('ws服务器错误:', error)
+        clearInterval(heartbeat)
+    })
+    // 告知客户端连接成功
+    // ws.send(JSON.stringify({
+    //     type: 'chat',
+    //     content: '已与ws服务器连接'
+    // }))
+})
 
 // 中间件配置
 app.use(cors());  // 跨域处理
@@ -139,7 +117,7 @@ const startServer = async () => {
         await initDatabase();
 
         // 启动HTTP服务
-        server.listen(PORT, () => {
+        server.listen(PORT, () => {  // 写多少,就运行在多少端口
             console.log(`服务器运行在端口 ${PORT}`);
             console.log(`访问地址: http://localhost:${PORT}`);
             console.log(`WebSocket地址: ws://localhost:${PORT}`);
