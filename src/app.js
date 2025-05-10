@@ -118,12 +118,12 @@ const startServer = async () => {
 
         // 启动HTTP服务
         server.listen(PORT, () => {  // 写多少,就运行在多少端口
-            console.log(`服务器运行在端口 ${PORT}`);
-            console.log(`访问地址: http://localhost:${PORT}`);
-            console.log(`WebSocket地址: ws://localhost:${PORT}`);
-        });
+            console.log(`服务器运行在端口 ${PORT}`)
+            console.log(`访问地址: http://localhost:${PORT}`)
+            console.log(`WebSocket地址: ws://localhost:${PORT}`)
+        })
     } catch (error) {
-        console.error('启动服务器失败:', error);
+        console.error('启动服务器失败:', error)
         process.exit(1);
     }
 };
