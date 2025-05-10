@@ -12,10 +12,11 @@ const uploadRoutes = require('./routes/uploadRoutes')
 const userModel = require('./models/userModel')
 const releaseModel = require('./models/releaseModel')
 const chatController = require('./controllers/chatController')
+const config = require('./config/environment')
 
 // 初始化 Express 应用
 const app = express()
-const PORT = process.env.PORT || 3000
+const PORT = config.port
 
 // 创建WebSocket服务器
 const http = require('http')
@@ -77,7 +78,7 @@ wss.on('connection', (ws) => {  // WebSocket 的实例,表示单个客户端与�
 })
 
 // 中间件配置
-app.use(cors());  // 跨域处理
+app.use(cors(config.cors));  // 使用配置的CORS设置
 app.use(bodyParser.json());  // 解析json请求体
 app.use(bodyParser.urlencoded({ extended: true }));  // 解析urlencoded请求体
 
@@ -108,7 +109,7 @@ const initDatabase = async () => {
         console.error('数据库初始化失败:', error);
         process.exit(1);
     }
-};
+}
 
 // 启动服务器
 const startServer = async () => {
@@ -117,10 +118,10 @@ const startServer = async () => {
         await initDatabase();
 
         // 启动HTTP服务
-        server.listen(PORT, () => {  // 写多少,就运行在多少端口
+        server.listen(PORT, () => {
             console.log(`服务器运行在端口 ${PORT}`);
-            console.log(`访问地址: http://localhost:${PORT}`);
-            console.log(`WebSocket地址: ws://localhost:${PORT}`);
+            console.log(`访问地址: ${config.baseUrl}`);
+            console.log(`WebSocket地址: ${config.wsUrl}`);
         });
     } catch (error) {
         console.error('启动服务器失败:', error);
